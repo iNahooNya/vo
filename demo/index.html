@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        .row {
+            width: 100%;
+            display: flex;
+        }
+
+        .col {
+            flex-grow: 1;
+            padding: 20px;
+        }
+
+        textarea {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 20px;
+            min-height: 500px;
+        }
+
+        button {
+            padding: 5px 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="row">
+    <div class="col">
+        <textarea id="origin" cols="30" rows="10" placeholder="输入服务端VO-Code"></textarea>
+        <button id="btn">转换</button>
+    </div>
+    <div class="col">
+        <textarea id="result" cols="30" rows="10"></textarea>
+    </div>
+</div>
+
+<script>
+    const $ = document.querySelector.bind(document);
+
+    // VOCode代码分割
+    const ROW_SPLIT = /\n\s*\n/g;
+
+    /**
+     * VOCode匹配正则
+     * ---------------
+     * 注释(可选)       - (\/\*\*\s+(?<comment>[\s\S]+?)\s+\*\/\s+)?
+     * 可访问性(没用)    - (?<accessibility>private)\s+
+     * 变量类型         - (?<type>\S+)\s+
+     * 变量名          - (?<name>\S+?);
+     * @type {RegExp}
+     */
+    const ROW_REG = /(\/\*\*\s+(?<comment>[\s\S]+?)\s+\*\/\s+)?(?<accessibility>private)\s+(?<type>\S+)\s+(?<name>\S+?);/;
+
+    // 注释处理
+    const formatComment = comment => {
+        if (!comment) return '';
+        const begin = ' // ';
+
+        comment = comment
+            .split('\n')
+            .map(text => text
+                .trim()
+                .replace(/^\*/, '')
+                .trim()
+            )
+            .filter(t => !!t)
+            .join('    ');
+
+        return begin + comment;
+    };
+
+    // 服务端类型映射JS类型
+    const mappingType = type => {
+        type = type.trim();
+        const ArrayReg = mappingType.ArrayTypeRegExp;
+
+        if (ArrayReg.test(type)) {
+            return `[ ${mappingType(ArrayReg.exec(type)[1])} ]`
+        }
+
+        if (type in mappingType.TYPE_MAPPING) {
+            return mappingType.TYPE_MAPPING[type];
+        } else {
+            return type;
+        }
+    };
+    mappingType.ArrayTypeRegExp = /^List<([^>]+)>$/;
+    mappingType.TYPE_MAPPING = {
+        Long: 'Number',
+        BigDecimal: 'Number',
+        Integer: 'Number',
+        String: 'String',
+    };
+
+    // 输出模板
+    const template = groups => `${groups.name} : ${mappingType(groups.type)} , ${formatComment(groups.comment)}`;
+
+    // 本地缓存，防手抖
+    const sskey = 'cus-lastvalue';
+    const pre = localStorage.getItem(sskey);
+    const $origin = $('#origin');
+    if (pre) $origin.value = pre;
+    $origin.addEventListener('input', e => {
+        if (e.target.value) {
+            localStorage.setItem(sskey, e.target.value);
+        } else {
+            localStorage.clear(sskey);
+        }
+    });
+
+    $('#btn').addEventListener('click', e => {
+        const origin = $origin.value;
+        const text_rows = origin.split(ROW_SPLIT);
+        const rows = text_rows.map(text => text.match(ROW_REG)).filter(v => !!v).map(v => v.groups);
+
+        const formats = rows.map(g => template(g));
+
+        const $result = $('#result');
+
+        $result.value = formats.join('\n');
+    });
+
+</script>
+</body>
+</html>
